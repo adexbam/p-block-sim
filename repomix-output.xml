@@ -1,0 +1,2777 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+Event.py
+InputsConfig.py
+Main.py
+Models/AppendableBlock/Block.py
+Models/AppendableBlock/BlockCommit.py
+Models/AppendableBlock/Network.py
+Models/AppendableBlock/Node.py
+Models/AppendableBlock/Statistics.py
+Models/AppendableBlock/Transaction.py
+Models/AppendableBlock/Verification.py
+Models/Bitcoin/BlockCommit.py
+Models/Bitcoin/Consensus.py
+Models/Bitcoin/Node.py
+Models/Block.py
+Models/BlockCommit.py
+Models/Consensus.py
+Models/Ethereum/Block.py
+Models/Ethereum/BlockCommit.py
+Models/Ethereum/Consensus.py
+Models/Ethereum/Distribution/DistFit.py
+Models/Ethereum/Incentives.py
+Models/Ethereum/Node.py
+Models/Ethereum/Transaction.py
+Models/Incentives.py
+Models/Network.py
+Models/Node.py
+Models/Transaction.py
+README.md
+Scheduler.py
+Statistics.py
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="Models/AppendableBlock/Block.py">
+#######################################################################################
+#
+# This class inherits the Block class and is used to create Block objects as required
+# by the AppendableBlock model.
+#
+# Author: Panayiota Theodorou
+# Date: March 2020
+#
+#######################################################################################
+
+from Models.Block import Block as BaseBlock
+
+
+class Block(BaseBlock):
+
+    def __init__(self,
+                 depth=0,
+                 id=0,
+                 previous=-1,
+                 timestamp=0,
+                 miner=None,
+                 transactions=[],
+                 size=1.0,
+                 nodeId=0,
+                 gatewayIds="x",
+                 receiverGatewayId="x"):
+
+        super().__init__(depth, id, previous, timestamp, miner, transactions, size)
+        self.nodeId = nodeId
+        self.gatewayIds = gatewayIds
+        self.receiverGatewayId = receiverGatewayId
+</file>
+
+<file path="Models/AppendableBlock/Network.py">
+#######################################################################################
+#
+# This class is used to abstract various network delays for the AppendableBlock model.
+#
+# Author: Panayiota Theodorou
+# Date: March 2020
+#
+#######################################################################################
+
+import random
+from InputsConfig import InputsConfig as p
+
+
+class Network:
+    # Delay for propagating transactions in the network
+    def tx_prop_delay():
+        return random.expovariate(1/p.propTxDelay)
+
+    # Delay for propagating transactions in the network
+    def tx_list_prop_delay():
+        return random.expovariate(1/p.propTxListDelay)
+
+    # Delay for releasing the token
+    def tx_token_release_delay():
+        return random.uniform(0.0001, 0.0005)
+</file>
+
+<file path="Models/AppendableBlock/Node.py">
+#######################################################################################
+#
+# This class inherits the class Node and is used to create Node objects as required by
+# the AppendableBlock model.
+#
+# Author: Panayiota Theodorou
+# Date: March 2020
+#
+#######################################################################################
+from Models.AppendableBlock.Block import Block
+from Models.Node import Node as BaseNode
+
+
+class Node(BaseNode):
+
+    # Construct Node object
+    def __init__(self, id, nodeType, gatewayIds):
+        super().__init__(id)
+        # Defines the node type - "g" for gateway and "d" for device
+        self.nodeType = nodeType
+
+        # Holds the gatway ids that this node can connect to
+        self.gatewayIds = gatewayIds
+
+        # Used by gateways to hold a local copy of the blockchain
+        self.blockchain = []
+
+        # Used by gateway nodes to hold transactions from its device nodes
+        self.transactionsPool = []
+
+    # Generates a genesis block and appends it to the local blockchain of all the gateway nodes
+    def generate_gensis_block():
+        from InputsConfig import InputsConfig as p
+        for node in p.NODES[0:p.Gn]:
+            node.blockchain.append(Block())
+
+    # Resets the node state
+    def reset_state(self):
+        self.blockchain.clear()
+        self.transactionsPool.clear()
+</file>
+
+<file path="Models/AppendableBlock/Statistics.py">
+#######################################################################################
+#
+# This class is used to collect simulation data and to produce an Excel report with
+# several worksheets as required by the AppendableBlock model.
+#
+# Author: Panayiota Theodorou
+# Date: March 2020
+#
+#######################################################################################
+
+
+from InputsConfig import InputsConfig as p
+from Models.Consensus import Consensus as c
+from Models.Incentives import Incentives
+import pandas as pd
+from Models.AppendableBlock.Block import Block as block
+import numpy as np
+from datetime import datetime
+
+
+class Statistics:
+
+    # Hold various calculations
+    total_blocks = 0
+    chains = []
+    transactions = []
+    transaction_latencies = []
+    average_transaction_latency = 0.0
+    transaction_throughput = 0.0
+    simulation_duration = 0.0
+
+    # Gathers simulation data and calculates the results
+    def calculate():
+        Statistics.gateway_chains()
+        Statistics.gateway_transactions()
+        Statistics.transaction_latency()
+        Statistics.results()
+
+    # Gathers information relating to the gateway chains
+    def gateway_chains():
+        for gateway_node in p.NODES[0:p.Gn]:
+            for b in gateway_node.blockchain:
+                info = [gateway_node.id, b.depth, b.id, b.previous,
+                        b.timestamp, len(b.transactions)]
+                Statistics.chains += [info]
+
+    # Gathers transaction data from the gateway blockchains
+    def gateway_transactions():
+        for gateway_node in p.NODES[0:p.Gn]:
+            for b in gateway_node.blockchain:
+                for tx in b.transactions:
+                    info = [gateway_node.id, tx.id, tx.sender, tx.to,
+                            tx.timestamp[0], tx.timestamp[1], tx.timestamp[2]]
+                    Statistics.transactions += [info]
+
+    # Calculates transaction latencies
+    def transaction_latency():
+        sorted_tx = []
+        sorted_tx = Statistics.transactions.copy()
+        sorted_tx.sort(key=lambda tx: tx[1])
+        max_insertion_time = 0.0
+        tx_count = 0
+
+        for tx in sorted_tx:
+            tx_count += 1
+            if tx[6] > max_insertion_time:
+                max_insertion_time = tx[6]
+            if tx_count % p.Gn == 0:
+                latency = max_insertion_time-tx[4]
+                info = [tx[1], latency]
+                Statistics.transaction_latencies.append(info)
+                max_insertion_time = 0.0
+
+    # Calculates the results
+    def results():
+        # Calculate average transcation latency
+        latancies = []
+        for l in Statistics.transaction_latencies:
+            latancies.append(l[1])
+        Statistics.average_transaction_latency = np.mean(latancies)
+
+        # Obtain the earliest transaction creation time
+        # and the latest transaction insertion time
+        earliest_tx_creation_time = 9999999999.0
+        latest_tx_insertion_time = 0.0
+        for tx in Statistics.transactions:
+            if tx[4] < earliest_tx_creation_time:
+                earliest_tx_creation_time = tx[4]
+
+            if tx[6] > latest_tx_insertion_time:
+                latest_tx_insertion_time = tx[6]
+
+        # Calculate the simulation duration
+        Statistics.simulation_duration = latest_tx_insertion_time - earliest_tx_creation_time
+
+        # Calculate transaction throughput (transactions per second)
+        number_of_tx = float(p.Dn * p.Gn * p.Tn)
+        Statistics.transaction_throughput = number_of_tx/Statistics.simulation_duration
+
+    # Produce results report as an Excel worksheet
+    def print_to_excel(simulationRunNumber, detail_report):
+        # Create the worksheets
+        df1 = pd.DataFrame({'No. of Gateways': [p.Gn], 'Total No. of Devices': [
+            p.Gn * p.Dn], 'Total No. of Blocks': [Statistics.total_blocks], 'Blocks per Chain': [Statistics.total_blocks/p.Gn], 'Max TX List Size': [p.maxTxListSize], 'Total Transcations': [p.Gn*p.Dn*p.Tn], 'Average Transaction Latency': [Statistics.average_transaction_latency], 'Transaction Throughput': [
+            Statistics.transaction_throughput], 'Simulation Duration (secs)': [Statistics.simulation_duration]})
+
+        df2 = pd.DataFrame({'No. of Gateways': [p.Gn], 'No. of Devices per Gateway': [
+            p.Dn], 'Total No. of Devices': [p.Gn*p.Dn], 'Total No. of Nodes': [p.Nn], 'Transactions per Device': [p.Tn]})
+
+        if detail_report:
+            df3 = pd.DataFrame(Statistics.chains)
+            df3.columns = ['Gateway Node ID', 'Block Depth', 'Block ID',
+                           'Previous Block ID', 'Block Timestamp', 'No. of Transactions']
+
+            df4 = pd.DataFrame(Statistics.transactions)
+            df4.columns = ['Gateway Node ID', 'Tx ID', 'Sender Node ID',
+                           'Receiver Node ID', 'Tx Creation Time', 'Tx Reception Time', 'Tx Insertion Time']
+
+            df5 = pd.DataFrame(Statistics.transaction_latencies)
+            df5.columns = ['TxID', 'Latency']
+
+        # Setup the filename
+        fname = "Statistics-{0}-{1}.xlsx".format(
+            datetime.now().strftime("%d.%m.%Y-%H.%M.%S"), (simulationRunNumber + 1))
+
+        # Save worksheets into the workbook
+        writer = pd.ExcelWriter(fname, engine='xlsxwriter')
+        df1.to_excel(writer, sheet_name='Results')
+        df2.to_excel(writer, sheet_name='InputConfig')
+        if detail_report:
+            df3.to_excel(writer, sheet_name='GatewayBlockchains')
+            df4.to_excel(writer, sheet_name='GatewayTransactions')
+            df5.to_excel(writer, sheet_name='transaction_latencies')
+        writer.close()
+        #writer.save()
+
+    # Reset the statistics data and clear global variables ready for the next simulation run
+    def reset():
+        # Initialise class variables
+        Statistics.total_blocks = 0
+        Statistics.chains.clear()
+        Statistics.transactions.clear()
+        Statistics.transaction_latencies.clear()
+        Statistics.average_transaction_latency = 0.0
+        Statistics.transaction_throughput = 0.0
+        Statistics.simulation_duration = 0.0
+
+        # Initialise gateway node variables
+        for node in p.NODES[0:p.Gn]:
+            node.reset_state()
+</file>
+
+<file path="Models/AppendableBlock/Transaction.py">
+from Models.Transaction import Transaction as BaseTransaction
+from Models.AppendableBlock.Network import Network
+from InputsConfig import InputsConfig as p
+import random
+import numpy as np
+import operator
+
+#######################################################################################
+#
+# This class inherits the Transaction class and is used to create transaction
+# objects as required by  the AppendableBlock model.
+#
+# Author: Panayiota Theodorou
+# Date: March 2020
+#
+#######################################################################################
+
+
+class Transaction(BaseTransaction):
+    def __init__(self, previous=-1):
+        super().__init__()
+
+        # Previous transaction used to chain transaction
+        self.previous = previous
+
+#######################################################################################
+#
+# This class is used to generate the transactions for all the devices in the network
+# as required by the AppendableBlock model. Each transaction is first created and then
+# it is propogated to the device's gateway.
+#
+# Author: Panayiota Theodorou
+# Date: March 2020
+#
+#######################################################################################
+
+
+class FullTransaction():
+
+    def create_transactions():
+        # Generate Tn transaction from each device
+        for i in range(p.Tn):
+            # Each device generates a transaction per second to be sent to its gateway
+            for j in range(p.Gn * p.Dn):
+                tx = Transaction()
+                tx.id = random.randrange(100000000000)
+                creation_time = random.uniform(i, i + 1)
+                receive_time = creation_time
+                insert_time = receive_time
+                tx.timestamp = [creation_time, receive_time, insert_time]
+                nodeIndex = p.Gn + j
+                sender = p.NODES[nodeIndex]
+                tx.sender = sender.id
+                tx.to = sender.gatewayIds
+                FullTransaction.propagate_transaction(tx)
+
+    # Propogate transaction to its gateway
+    def propagate_transaction(tx):
+        index = p.GATEWAYIDS.index(tx.to)
+        tx.timestamp[1] = tx.timestamp[1] + Network.tx_prop_delay()
+        p.NODES[index].transactionsPool.append(tx)
+</file>
+
+<file path="Models/AppendableBlock/Verification.py">
+#######################################################################################
+#
+# This class contains various methods for verifying that the implementation of the
+# AppendableBLock model is correct.
+#
+# Author: Panayiota Theodorou
+# Date: March 2020
+#
+#######################################################################################
+
+from InputsConfig import InputsConfig as p
+from Models.AppendableBlock.Block import Block as block
+from Models.AppendableBlock.Transaction import Transaction as Transaction
+import pandas as pd
+import numpy as np
+from datetime import datetime
+
+
+class Verification:
+
+    # Holds all the results from the verification checks
+    verification_results = []
+
+    # Performs all the verification checks
+    def perform_checks():
+        Verification.check_total_nodes()
+        Verification.check_gateway_nodes()
+        Verification.check_device_nodes()
+        Verification.check_total_blocks()
+        Verification.check_block_ids()
+        Verification.check_genesis_blocks()
+        Verification.check_gateway_blocks()
+        Verification.check_device_blocks()
+        Verification.check_block_chaining()
+        Verification.check_total_transactions()
+        Verification.check_transaction_pools()
+        Verification.check_transactions_ids()
+        Verification.check_transaction_sets()
+        Verification.check_device_transactions()
+        Verification.check_transaction_chaining()
+        Verification.check_transaction_latency()
+        Verification.check_transaction_throughput()
+        Verification.produce_verification_report()
+
+    # Converts the verification check status to a string
+    def display_status(check_passed):
+        status = []
+        if check_passed:
+            status = "PASSED"
+        else:
+            status = "FAILED"
+
+        return status
+
+    # Checks that the total number of nodes created is correct
+    def check_total_nodes():
+        check_passed = True
+        check_info = []
+        check_result = []
+        expected_nodes = p.Nn
+        check_info = "%s nodes found" % (expected_nodes)
+        nodes_found = len(p.NODES)
+
+        if nodes_found != expected_nodes:
+            check_passed = False
+            check_info = "Expecting %s nodes and found %s" % (
+                expected_nodes, nodes_found)
+
+        check_result = ["Check Total Nodes",
+                        Verification.display_status(check_passed), check_info]
+
+        Verification.verification_results.append(check_result)
+
+    # Returns the number of nodes created of the specified node type
+    def get_number_of_nodes(node_type):
+        node_count = 0
+
+        if node_type == "g":
+            for node in p.NODES[0:p.Gn]:
+                if node.nodeType == node_type:
+                    node_count += 1
+        else:
+            for node in p.NODES[p.Gn:]:
+                if node.nodeType == node_type:
+                    node_count += 1
+
+        return node_count
+
+    # Checks that the number of gateway nodes created is correct
+    def check_gateway_nodes():
+        check_passed = True
+        check_info = []
+        check_result = []
+        expected_gateways = p.Gn
+        check_info = "%s gateway nodes found" % (expected_gateways)
+        gateways_found = Verification.get_number_of_nodes("g")
+        if gateways_found != expected_gateways:
+            check_passed = False
+            check_info = "Expecting %s gateway nodes and found %s" % (
+                expected_gateways, gateways_found)
+
+        check_result = ["Check Gateway Nodes",
+                        Verification.display_status(check_passed), check_info]
+
+        Verification.verification_results.append(check_result)
+
+    # Checks that the number of device nodes created is correct
+    def check_device_nodes():
+        check_passed = True
+        check_info = []
+        check_result = []
+
+        expected_devices = p.Gn * p.Dn
+
+        check_info = "%s device nodes found" % (expected_devices)
+        devices_found = Verification.get_number_of_nodes("d")
+
+        if devices_found != expected_devices:
+            check_passed = False
+            check_info = "Expecting %s device nodes and found %s" % (
+                expected_devices, devices_found)
+
+        check_result = ["Check Device Nodes",
+                        Verification.display_status(check_passed), check_info]
+
+        Verification.verification_results.append(check_result)
+
+    # Checks that the total number of blocks created is correct
+    def check_total_blocks():
+        check_passed = True
+        check_info = []
+        check_result = []
+
+        # Check the blocks for each gateway
+        # Expected blocks = Genesis block + gateway blocks + device blocks
+        expected_blocks_per_gateway = 1 + p.Gn + (p.Gn * p.Dn)
+        check_info = "%s blocks found in all the gateway blockchains" % (
+            expected_blocks_per_gateway)
+
+        for gateway_node in p.NODES[0:p.Gn]:
+            if len(gateway_node.blockchain) != expected_blocks_per_gateway:
+                check_passed = False
+                check_info = "Expecting %s blocks and found %s in the blockchain of gateway %s" % (
+                    expected_blocks_per_gateway, len(gateway_node.blockchain), gateway_node.id)
+                break
+
+        check_result = ["Check Total Blocks",
+                        Verification.display_status(check_passed), check_info]
+
+        Verification.verification_results.append(check_result)
+
+    # Checks that all the block ids are unique
+    def check_block_ids():
+        check_passed = True
+        check_info = []
+        check_result = []
+        block_id_set = set()
+
+        check_info = "Block ids are unique for all the gateway blockchains"
+        for gateway_node in p.NODES[0:p.Gn]:
+            block_id_set.clear()
+            for block in gateway_node.blockchain:
+                if block.id in block_id_set:
+                    check_passed = False
+                    check_info = "Block id %s is not unique in the blockchain of gateway %s" % (
+                        block.id, gateway_node.id)
+                    break
+                else:
+                    block_id_set.add(block.id)
+
+            if not check_passed:
+                break
+
+        check_result = ["Check Block Ids",
+                        Verification.display_status(check_passed), check_info]
+
+        Verification.verification_results.append(check_result)
+
+    # Checks that each blockchain has a genesis block
+    def check_genesis_blocks():
+        check_passed = True
+        check_info = []
+        check_result = []
+        check_info = "One genesis block found in all the gateway blockchains"
+
+        for gateway_node in p.NODES[0:p.Gn]:
+            block = gateway_node.blockchain[0]
+            if block.id != 0 or block.previous != -1:
+                check_passed = False
+                check_info = "No genesis block found in the blockchain of gateway %s" % (
+                    gateway_node.id)
+                break
+
+        check_result = ["Check Genesis Blocks",
+                        Verification.display_status(check_passed), check_info]
+
+        Verification.verification_results.append(check_result)
+
+    # Checks that each blockchain has blocks for all the gateways
+    def check_gateway_blocks():
+        check_passed = True
+        check_info = []
+        check_result = []
+        check_info = "%s gateway blocks found in all the gateway blockchains" % (
+            p.Gn)
+
+        for gateway_node in p.NODES[0:p.Gn]:
+            block_count = 0
+            for b in gateway_node.blockchain[1:p.Gn]:
+                if b.nodeId != p.GATEWAYIDS[block_count]:
+                    check_passed = False
+                    check_info = "Gateway %s has no block for gateway %s in its blockchain" % (gateway_node,
+                                                                                               p.GATEWAYIDS[block_count])
+                    break
+                block_count += 1
+
+            if not check_passed:
+                break
+
+        check_result = ["Check Gateway Blocks",
+                        Verification.display_status(check_passed), check_info]
+
+        Verification.verification_results.append(check_result)
+
+    # Checks that each blockchain has blocks for all the devices
+    def check_device_blocks():
+        check_passed = True
+        check_info = []
+        check_result = []
+        expected_device_blocks_per_gateway = p.Gn * p.Dn
+        check_info = "%s device blocks found in all the gateway blockchains" % (
+            expected_device_blocks_per_gateway)
+
+        for gateway_node in p.NODES[0:p.Gn]:
+            for device_node_id in range(1, p.Dn+1):
+                if gateway_node.blockchain[p.Gn + device_node_id].nodeId != device_node_id:
+                    check_passed = False
+                    check_info = "Gateway %s has no block for device %s in its blockchain" % (
+                        gateway_node.nodeId, device_node_id)
+                    break
+
+            if not check_passed:
+                break
+
+        check_result = ["Check Device Blocks",
+                        Verification.display_status(check_passed), check_info]
+
+        Verification.verification_results.append(check_result)
+
+    # Checks that each blockchain has its blocks chained correctly
+    def check_block_chaining():
+        check_passed = True
+        check_info = []
+        check_result = []
+        check_info = "Blocks in all the gateway blockchains are chained correctly"
+
+        for gateway_node in p.NODES[0:p.Gn]:
+            previous_block_id = -1
+            for block in gateway_node.blockchain:
+                if block.previous != previous_block_id:
+                    check_passed = False
+                    check_info = "In the blockchain of gateway %s block %s is pointing to block %s instead of block %s" % (
+                        gateway_node.nodeId, block.id, block.previous, previous_block_id)
+                    break
+                else:
+                    previous_block_id = block.id
+
+            if not check_passed:
+                break
+
+        check_result = ["Check Block Chaining",
+                        Verification.display_status(check_passed), check_info]
+
+        Verification.verification_results.append(check_result)
+
+    # Checks that each blockchain has the correct number of transactions.
+    def check_total_transactions():
+        check_passed = True
+        check_info = []
+        check_result = []
+
+        expected_transactions_per_gateway = p.Dn * p.Gn * p.Tn
+        check_info = "%s transaction found in all the gateway blockchains" % (
+            expected_transactions_per_gateway)
+
+        for gateway_node in p.NODES[0:p.Gn]:
+            total_transactions = 0
+            for block in gateway_node.blockchain:
+                total_transactions += len(block.transactions)
+
+            if total_transactions != expected_transactions_per_gateway:
+                check_passed = False
+                check_info = "Expecting %s transaction and found %s in the blockchain of gateway %s" % (
+                    expected_transactions_per_gateway, total_transactions, gateway_node.id)
+                break
+
+            if not check_passed:
+                break
+
+        check_result = ["Check Total Transcations",
+                        Verification.display_status(check_passed), check_info]
+
+        Verification.verification_results.append(check_result)
+
+    # Checks that all transaction in each gateway have been processed.
+    def check_transaction_pools():
+        check_passed = True
+        check_info = []
+        check_result = []
+        check_info = "All gateway transaction pools processed"
+
+        for gateway_node in p.NODES[0:p.Gn]:
+            tx_count = len(gateway_node.transactionsPool)
+            if tx_count != 0:
+                check_passed = False
+                check_info = "Transaction pool of gateway %s contains %s transactions" % (
+                    gateway_node.id, tx_count)
+            break
+
+        check_result = ["Check Transcation Pool",
+                        Verification.display_status(check_passed), check_info]
+
+        Verification.verification_results.append(check_result)
+
+    # Checks that the transactions, in each blockchain, have unique ids
+    def check_transactions_ids():
+        check_passed = True
+        check_info = []
+        check_result = []
+        tx_set = set()
+
+        check_info = "Transactions ids in all the gateway blockchain are unique"
+        for gateway_node in p.NODES[0:p.Gn]:
+            tx_set.clear()
+            for block in gateway_node.blockchain:
+                for tx in block.transactions:
+                    if tx.id in tx_set:
+                        check_passed = False
+                        check_info = "Transaction id %s is not unique in the blockchain of gateway %s" % (
+                            tx.id, gateway_node.id)
+                        break
+                    else:
+                        tx_set.add(tx.id)
+
+                if not check_passed:
+                    break
+
+            if not check_passed:
+                break
+
+        check_result = ["Check Transcation Ids",
+                        Verification.display_status(check_passed), check_info]
+
+        Verification.verification_results.append(check_result)
+
+    # Creates a set of transactions for the specified blockchain
+    def create_blockchain_tx_set(tx_set, BlockChain):
+        for block in BlockChain:
+            for tx in block.transactions:
+                if not (tx.id in tx_set):
+                    tx_set.add(tx.id)
+
+    # Checks that all the blockchains have the same set of transactions
+    def check_transaction_sets():
+        check_passed = True
+        check_info = []
+        check_result = []
+        first_gateway_tx_set = set()
+        check_info = "All gateway blockchains have the same set of transactions"
+        Verification.create_blockchain_tx_set(
+            first_gateway_tx_set, p.NODES[0].blockchain)
+        for gateway_node in p.NODES[1:p.Gn]:
+            gateway_tx_set = set()
+            Verification.create_blockchain_tx_set(
+                gateway_tx_set, gateway_node.blockchain)
+            if gateway_tx_set != first_gateway_tx_set:
+                check_passed = False
+                check_info = "The transactions in the blockchain of gateway %s are different from those in the blockchain of gateway %s" % (
+                    gateway_node.id, p.NODES[0].id)
+                break
+
+        check_result = ["Check Transcations Sets",
+                        Verification.display_status(check_passed), check_info]
+
+        Verification.verification_results.append(check_result)
+
+    # Checks that device transactions are inserted into the correct blocks
+    def check_device_transactions():
+        check_passed = True
+        check_info = []
+        check_result = []
+        check_info = "Transactions from all devices are inserted into all the gateway blockchains correctly"
+
+        for gateway_node in p.NODES[0:p.Gn]:
+            device_id = 0
+            for block in gateway_node.blockchain[1+p.Gn:]:
+                device_id += 1
+                for tx in block.transactions:
+                    if tx.sender != device_id:
+                        check_passed = False
+                        check_info = "Transaction %s from device %s found in block for devive %s in the blockchain of gateway %s" % (
+                            tx.id, tx.sender, device_id,  gateway_node.id)
+                        break
+                if not check_passed:
+                    break
+            if not check_passed:
+                break
+
+        check_result = ["Check Device Transcations",
+                        Verification.display_status(check_passed), check_info]
+
+        Verification.verification_results.append(check_result)
+
+    # Checks that transactions in all block ledgers are chained correctly
+    def check_transaction_chaining():
+        check_passed = True
+        check_info = []
+        check_result = []
+        check_info = "Transactions in all block ledgers are chained correctly"
+
+        for gateway_node in p.NODES[0:p.Gn]:
+            device_id = 0
+            for block in gateway_node.blockchain[1+p.Gn:]:
+                device_id += 1
+                previous_tx_id = -1
+                for tx in block.transactions:
+                    if tx.previous != previous_tx_id:
+                        check_passed = False
+                        check_info = "In block ledger of device %s transaction %s is pointing to transaction %s instead of transaction %s" % (
+                            device_id, tx.id, tx.previous, previous_tx_id)
+                        break
+                    previous_tx_id = tx.id
+
+                if not check_passed:
+                    break
+            if not check_passed:
+                break
+
+        check_result = ["Check Transaction Chaining",
+                        Verification.display_status(check_passed), check_info]
+
+        Verification.verification_results.append(check_result)
+
+    # Checks that the average transaction latency is of the correct order
+    def check_transaction_latency():
+        check_passed = True
+        check_info = []
+        check_result = []
+        TWO_HUNDRED_MS = 200.0
+
+        average_latency = 0
+        max_insertion_time = 0.0
+        tx_info = []
+        latencies = []
+        tx_count = 0
+
+        # Gather all the transaction from all the gateways
+        for gateway_node in p.NODES[0:p.Gn]:
+            for block in gateway_node.blockchain:
+                for tx in block.transactions:
+                    tx_info.append([tx.id, tx.timestamp[0], tx.timestamp[2]])
+
+        # Order the transactions by creation time
+        tx_info.sort(key=lambda tx: tx[1])
+
+        # Calculate the average latency
+        for tx in tx_info:
+            tx_count += 1
+            if tx[2] > max_insertion_time:
+                max_insertion_time = tx[2]
+            if tx_count % p.Gn == 0:
+                latencies.append(max_insertion_time-tx[1])
+                max_insertion_time = 0.0
+
+        average_latency = round(np.mean(latencies)*1000, 1)
+
+        check_info = "Average transaction latency of %s ms is of the correct order" % (
+            average_latency)
+
+        if average_latency > TWO_HUNDRED_MS:
+            check_passed = False
+            check_info = "Average transaction latency of %s ms is higher than expected" % (
+                average_latency)
+
+        check_result = ["Check Transcation Latency",
+                        Verification.display_status(check_passed), check_info]
+
+        Verification.verification_results.append(check_result)
+
+    # Checks that the transaction throughput is correct
+    def check_transaction_throughput():
+        check_passed = True
+        check_info = []
+        check_result = []
+        earliest_tx_creation_time = 9999999999.0
+        latest_tx_insertion_time = 0.0
+        ONE_PERCENT = 1
+        tx_submission_rate = p.Dn * p.Gn
+
+        # Collect all the transaction from al the gateway chains
+        for gateway_node in p.NODES[0:p.Gn]:
+            for block in gateway_node.blockchain:
+                for tx in block.transactions:
+                    if tx.timestamp[0] < earliest_tx_creation_time:
+                        earliest_tx_creation_time = tx.timestamp[0]
+                    if tx.timestamp[2] > latest_tx_insertion_time:
+                        latest_tx_insertion_time = tx.timestamp[2]
+        transaction_throughput = round(float(
+            p.Dn * p.Gn * p.Tn)/(latest_tx_insertion_time - earliest_tx_creation_time), 3)
+        percentage_increase = (
+            abs(transaction_throughput - tx_submission_rate)/tx_submission_rate)*100
+
+        check_info = "Transaction throughput of %s per second is close enough to the submission rate of %s per second" % (
+            transaction_throughput, tx_submission_rate)
+
+        if percentage_increase > ONE_PERCENT:
+            check_passed = False
+            check_info = "Transaction throughput of %s per second is not close enough to the submission rate of %s per second" % (
+                transaction_throughput, tx_submission_rate)
+
+        check_result = ["Check Transcation Throughput",
+                        Verification.display_status(check_passed), check_info]
+
+        Verification.verification_results.append(check_result)
+
+    # Produce verification report as an Excel worksheet
+    def produce_verification_report():
+        # Create the worksheets
+        df1 = pd.DataFrame({'No. of Gateways': [p.Gn], 'No. of Devices per Gateway': [
+            p.Dn], 'Total of No. of Nodes': [p.Nn], 'Transactions per Device': [p.Tn]})
+
+        df2 = pd.DataFrame(Verification.verification_results)
+        df2.columns = ['Verification Check', 'Status', 'Additional Info']
+
+        # Setup the filename
+        file_name = "VerificationResults-{0}.xlsx".format(
+            datetime.now().strftime("%d.%m.%Y-%H.%M.%S"))
+
+        # Save worksheets into the workbook
+        writer = pd.ExcelWriter(file_name, engine='xlsxwriter')
+        df1.to_excel(writer, sheet_name='InputConfig')
+        df2.to_excel(writer, sheet_name='VerificationResults')
+        writer.close()
+        # writer.save()
+</file>
+
+<file path="Models/Bitcoin/BlockCommit.py">
+from Scheduler import Scheduler
+from InputsConfig import InputsConfig as p
+from Models.Bitcoin.Node import Node
+from Statistics import Statistics
+from Models.Transaction import LightTransaction as LT, FullTransaction as FT
+from Models.Network import Network
+from Models.Bitcoin.Consensus import Consensus as c
+from Models.BlockCommit import BlockCommit as BaseBlockCommit
+
+class BlockCommit(BaseBlockCommit):
+
+    # Handling and running Events
+    def handle_event(event):
+        if event.type == "create_block":
+            BlockCommit.generate_block(event)
+        elif event.type == "receive_block":
+            BlockCommit.receive_block(event)
+
+    # Block Creation Event
+    def generate_block (event):
+        miner = p.NODES[event.block.miner]
+        minerId = miner.id
+        eventTime = event.time
+        blockPrev = event.block.previous
+
+        if blockPrev == miner.last_block().id:
+            Statistics.totalBlocks += 1 # count # of total blocks created!
+            if p.hasTrans:
+                if p.Ttechnique == "Light": blockTrans,blockSize = LT.execute_transactions()
+                elif p.Ttechnique == "Full": blockTrans,blockSize = FT.execute_transactions(miner,eventTime)
+
+                event.block.transactions = blockTrans
+                event.block.usedgas= blockSize
+
+            miner.blockchain.append(event.block)
+
+            if p.hasTrans and p.Ttechnique == "Light":LT.create_transactions() # generate transactions
+
+            BlockCommit.propagate_block(event.block)
+            BlockCommit.generate_next_block(miner,eventTime)# Start mining or working on the next block
+
+    # Block Receiving Event
+    def receive_block (event):
+
+        miner = p.NODES[event.block.miner]
+        minerId = miner.id
+        currentTime = event.time
+        blockPrev = event.block.previous # previous block id
+
+
+        node = p.NODES[event.node] # recipint
+        lastBlockId= node.last_block().id # the id of last block
+
+        #### case 1: the received block is built on top of the last block according to the recipient's blockchain ####
+        if blockPrev == lastBlockId:
+            node.blockchain.append(event.block) # append the block to local blockchain
+            if p.hasTrans and p.Ttechnique == "Full": BlockCommit.update_transactionsPool(node, event.block)
+            BlockCommit.generate_next_block(node,currentTime)# Start mining or working on the next block
+
+         #### case 2: the received block is  not built on top of the last block ####
+        else:
+            depth = event.block.depth + 1
+            if (depth > len(node.blockchain)):
+                BlockCommit.update_local_blockchain(node,miner,depth)
+                BlockCommit.generate_next_block(node,currentTime)# Start mining or working on the next block
+
+            if p.hasTrans and p.Ttechnique == "Full": BlockCommit.update_transactionsPool(node,event.block) # not sure yet.
+
+    # Upon generating or receiving a block, the miner start working on the next block as in POW
+    def generate_next_block(node,currentTime):
+	    if node.hashPower > 0:
+                 blockTime = currentTime + c.Protocol(node) # time when miner x generate the next block
+                 Scheduler.create_block_event(node,blockTime)
+
+    def generate_initial_events():
+            currentTime=0
+            for node in p.NODES:
+            	BlockCommit.generate_next_block(node,currentTime)
+
+    def propagate_block (block):
+        for recipient in p.NODES:
+            if recipient.id != block.miner:
+                blockDelay= Network.block_prop_delay() # draw block propagation delay from a distribution !! or you can assign 0 to ignore block propagation delay
+                Scheduler.receive_block_event(recipient,block,blockDelay)
+</file>
+
+<file path="Models/Bitcoin/Consensus.py">
+import numpy as np
+from InputsConfig import InputsConfig as p
+from Models.Bitcoin.Node import Node
+from Models.Consensus import Consensus as BaseConsensus
+import random
+
+class Consensus(BaseConsensus):
+
+    """
+	We modelled PoW consensus protocol by drawing the time it takes the miner to finish the PoW from an exponential distribution
+        based on the invested hash power (computing power) fraction
+    """
+    def Protocol(miner):
+        ##### Start solving a fresh PoW on top of last block appended #####
+        TOTAL_HASHPOWER = sum([miner.hashPower for miner in p.NODES])
+        hashPower = miner.hashPower/TOTAL_HASHPOWER
+        return random.expovariate(hashPower * 1/p.Binterval)
+
+
+    """
+	This method apply the longest-chain approach to resolve the forks that occur when nodes have multiple differeing copies of the blockchain ledger
+    """
+    def fork_resolution():
+        BaseConsensus.global_chain = [] # reset the global chain before filling it
+
+        a=[]
+        for i in p.NODES:
+            a+=[i.blockchain_length()]
+        x = max(a)
+
+        b=[]
+        z=0
+        for i in p.NODES:
+            if i.blockchain_length() == x:
+                b+=[i.id]
+                z=i.id
+
+        if len(b) > 1:
+            c=[]
+            for i in p.NODES:
+                if i.blockchain_length() == x:
+                    c+=[i.last_block().miner]
+            z = np.bincount(c)
+            z= np.argmax(z)
+
+        for i in p.NODES:
+            if i.blockchain_length() == x and i.last_block().miner == z:
+                for bc in range(len(i.blockchain)):
+                    BaseConsensus.global_chain.append(i.blockchain[bc])
+                break
+</file>
+
+<file path="Models/Block.py">
+class Block(object):
+    
+    """ Defines the base Block model.
+
+    :param int depth: the index of the block in the local blockchain ledger (0 for genesis block)
+    :param int id: the uinque id or the hash of the block
+    :param int previous: the uinque id or the hash of the previous block
+    :param int timestamp: the time when the block is created
+    :param int miner: the id of the miner who created the block
+    :param list transactions: a list of transactions included in the block
+    :param int size: the block size in MB
+    """
+
+    def __init__(self,
+	 depth=0,
+	 id=0,
+	 previous=-1,
+	 timestamp=0,
+	 miner=None,
+	 transactions=[],
+	 size=1.0):
+
+        self.depth = depth
+        self.id = id
+        self.previous = previous
+        self.timestamp = timestamp
+        self.miner = miner
+        self.transactions = transactions or []
+        self.size = size
+</file>
+
+<file path="Models/BlockCommit.py">
+from InputsConfig import InputsConfig as p
+
+class BlockCommit:
+
+    # Handling and running Events
+    def handle_event(event):
+        if event.type == "create_block":
+            BlockCommit.generate_block(event)
+        elif event.type == "receive_block":
+            BlockCommit.receive_block(event)
+
+    # Block Creation Event
+    def generate_block (event):
+        pass
+
+    # Block Receiving Event
+    def receive_block (event):
+        pass
+
+    # Select a new miner to build a new block
+    def generate_next_block(node,currentTime):
+        pass
+    # Generate initial blocks to start the simulation with
+    def generate_initial_events():
+        pass
+    # Propagate the genrated block to other nodes in the network
+    def propagate_block (block):
+        pass
+    # Update local blockchain, if necessary, upon receiving a new valid block
+    def update_local_blockchain(node,miner,depth):
+        # the node here is the one that needs to update its blockchain, while miner here is the one who owns the last block generated
+        # the node will update its blockchain to mach the miner's blockchain
+        i=0
+        while (i < depth):
+            if (i < len(node.blockchain)):
+                if (node.blockchain[i].id != miner.blockchain[i].id): # and (self.node.blockchain[i-1].id == Miner.blockchain[i].previous) and (i>=1):
+                    #node.unclechain.append(node.blockchain[i]) # move block to unclechain
+                    newBlock = miner.blockchain[i]
+                    node.blockchain[i]= newBlock
+                    if p.hasTrans and p.Ttechnique == "Full": BlockCommit.update_transactionsPool(node,newBlock)
+            else:
+                newBlock = miner.blockchain[i]
+                node.blockchain.append(newBlock)
+                if p.hasTrans and p.Ttechnique == "Full": BlockCommit.update_transactionsPool(node,newBlock)
+            i+=1
+
+    # Update local blockchain, if necessary, upon receiving a new valid block. This method is only triggered if Full technique is used
+    def update_transactionsPool(node,block):
+        j=0
+        while j < len(block.transactions):
+            for t in node.transactionsPool:
+                if  block.transactions[j].id == t.id:
+                    del t
+                    break
+            j+=1
+</file>
+
+<file path="Models/Consensus.py">
+import numpy as np
+from InputsConfig import InputsConfig as p
+from Models.Node import Node
+import random
+
+class Consensus:
+    global_chain=[] # the accpted global chain after resovling the forks
+
+
+    """
+	This is to model the consensus protocol
+    """
+    def Protocol(node):
+        pass
+
+    """
+	This method is to resolve the forks that occur when nodes have multiple differeing copies of the blockchain ledger
+    """
+    def fork_resolution():
+        pass
+</file>
+
+<file path="Models/Ethereum/Block.py">
+from Models.Block import Block as BaseBlock
+
+class Block(BaseBlock):
+
+    """ Defines the Ethereum Block model.
+
+    :param int depth: the index of the block in the local blockchain ledger (0 for genesis block)
+    :param int id: the uinque id or the hash of the block
+    :param int previous: the uinque id or the hash of the previous block
+    :param int timestamp: the time when the block is created
+    :param int miner: the id of the miner who created the block
+    :param list transactions: a list of transactions included in the block
+    :param int size: the block size in MB
+    :param list uncles: a list of uncle blocks to be referenced in the block
+    :param int gaslimit: the block gas limit (e.g., current block gas limit = 8,000,000 units of gas)
+    :param int usedgas: the block used gas
+    """
+
+    def __init__(self,
+	 depth=0,
+	 id=0,
+	 previous=-1,
+	 timestamp=0,
+	 miner=None,
+	 transactions=[],
+	 size=1.0,
+	 uncles=[],
+     gaslimit= 8000000,
+     usedgas=0):
+
+        super().__init__(depth,id,previous,timestamp,miner,transactions,size)
+        self.uncles= uncles
+        self.gaslimit= gaslimit
+        self.usedgas= usedgas
+</file>
+
+<file path="Models/Ethereum/Incentives.py">
+from InputsConfig import InputsConfig as p
+from Models.Consensus import Consensus as c
+from Models.Incentives import Incentives as BaseIncentives
+from Statistics import Statistics
+
+
+class Incentives(BaseIncentives):
+
+    """
+	 Defines the rewarded elements (block + transactions), calculate and distribute the rewards among the participating nodes
+    """
+
+    def uncle_rewards(bc):
+         for uncle in bc.uncles:
+                for k in p.NODES:
+                       if uncle.miner == k.id:
+                             Statistics.totalUncles +=1
+                             uncle_height = uncle.depth # uncle depth
+                             block_height = bc.depth# block depth
+                             k.uncles+=1
+                             k.balance += ((uncle_height - block_height + 8) * p.Breward / 8) # Reward for mining an uncle block
+
+    ''' rewards for the miner who included in the incle block in his block '''
+    def uncle_inclusion_rewards(bc):
+         Ru=0 # uncle reward is set to 0
+         for uncle in bc.uncles:
+            Ru += p.UIreward
+         return Ru
+
+    def distribute_rewards():
+        for bc in c.global_chain:
+            for m in p.NODES:
+                if bc.miner == m.id:
+                    m.blocks +=1
+                    m.balance += p.Breward # increase the miner balance by the block reward
+                    tx_fee= Incentives.transactions_fee(bc)
+                    m.balance += tx_fee # add transaction fees to balance
+                    m.balance += Incentives.uncle_inclusion_rewards(bc) # add uncle inclusion rewards to balance
+            Incentives.uncle_rewards(bc) # add uncle generation rewards for the miner who build the uncle block
+</file>
+
+<file path="Models/Incentives.py">
+from InputsConfig import InputsConfig as p
+from Models.Consensus import Consensus as c
+
+class Incentives:
+
+    """
+	 Defines the rewarded elements (block + transactions), calculate and distribute the rewards among the participating nodes
+    """
+    def distribute_rewards():
+        for bc in c.global_chain:
+            for m in p.NODES:
+                if bc.miner == m.id:
+                    m.blocks +=1
+                    m.balance += p.Breward # increase the miner balance by the block reward
+                    tx_fee= Incentives.transactions_fee(bc)
+                    m.balance += tx_fee # add transaction fees to balance
+
+
+    def transactions_fee(bc):
+        fee=0
+        for tx in  bc.transactions:
+            fee += tx.fee
+        return fee
+</file>
+
+<file path="Models/Network.py">
+import random
+from InputsConfig import InputsConfig as p
+
+class Network:
+    
+    # Delay for propagating blocks in the network
+    def block_prop_delay():
+    	return random.expovariate(1/p.Bdelay)
+
+    # Delay for propagating transactions in the network
+    def tx_prop_delay():
+    	return random.expovariate(1/p.Tdelay)
+</file>
+
+<file path="Models/Node.py">
+from Models.Block import Block
+
+class Node(object):
+
+    """ Defines the base Node model.
+
+        :param int id: the uinque id of the node
+        :param list blockchain: the local blockchain (a list to store chain state locally) for the node
+        :param list transactionsPool: the transactions pool. Each node has its own pool if and only if Full technique is chosen
+        :param int blocks: the total number of blocks mined in the main chain
+        :param int balance: the amount of cryptocurrencies a node has
+    """
+    def __init__(self,id):
+        self.id= id
+        self.blockchain= []
+        self.transactionsPool= []
+        self.blocks= 0#
+        self.balance= 0
+
+    # Generate the Genesis block and append it to the local blockchain for all nodes
+    def generate_gensis_block():
+        from InputsConfig import InputsConfig as p
+        for node in p.NODES:
+            node.blockchain.append(Block())
+
+    # Get the last block at the node's local blockchain
+    def last_block(self):
+        return self.blockchain[len(self.blockchain)-1]
+
+    # Get the length of the blockchain (number of blocks)
+    def blockchain_length(self):
+        return len(self.blockchain)-1
+
+    # reset the state of blockchains for all nodes in the network (before starting the next run) 
+    def resetState():
+        from InputsConfig import InputsConfig as p
+        for node in p.NODES:
+            node.blockchain= [] # create an array for each miner to store chain state locally
+            node.transactionsPool= []
+            node.blocks=0 # total number of blocks mined in the main chain
+            node.balance= 0 # to count all reward that a miner made
+</file>
+
+<file path="Statistics.py">
+from InputsConfig import InputsConfig as p
+from Models.Consensus import Consensus as c
+from Models.Incentives import Incentives
+import pandas as pd
+
+
+class Statistics:
+
+    ########################################################### Global variables used to calculate and print simuation results ###########################################################################################
+    totalBlocks=0
+    mainBlocks= 0
+    totalUncles=0
+    uncleBlocks=0
+    staleBlocks=0
+    uncleRate=0
+    staleRate=0
+    blockData=[]
+    blocksResults=[]
+    profits= [[0 for x in range(7)] for y in range(p.Runs * len(p.NODES))] # rows number of miners * number of runs, columns =7
+    index=0
+    chain=[]
+
+    def calculate():
+        Statistics.global_chain() # print the global chain
+        Statistics.blocks_results() # calcuate and print block statistics e.g., # of accepted blocks and stale rate etc
+        Statistics.profit_results() # calculate and distribute the revenue or reward for miners
+
+    ########################################################### Calculate block statistics Results ###########################################################################################
+    def blocks_results():
+        trans = 0
+
+        Statistics.mainBlocks= len(c.global_chain)-1
+        Statistics.staleBlocks = Statistics.totalBlocks - Statistics.mainBlocks
+        for b in c.global_chain:
+            if p.model==2: Statistics.uncleBlocks += len(b.uncles)
+            else: Statistics.uncleBlocks = 0
+            trans += len(b.transactions)
+        Statistics.staleRate= round(Statistics.staleBlocks/Statistics.totalBlocks * 100, 2)
+        if p.model==2: Statistics.uncleRate= round(Statistics.uncleBlocks/Statistics.totalBlocks * 100, 2)
+        else: Statistics.uncleRate==0
+        Statistics.blockData = [ Statistics.totalBlocks, Statistics.mainBlocks,  Statistics.uncleBlocks, Statistics.uncleRate, Statistics.staleBlocks, Statistics.staleRate, trans]
+        Statistics.blocksResults+=[Statistics.blockData]
+
+    ########################################################### Calculate and distibute rewards among the miners ###########################################################################################
+    def profit_results():
+
+        for m in p.NODES:
+            i = Statistics.index + m.id * p.Runs
+            Statistics.profits[i][0]= m.id
+            if p.model== 0: Statistics.profits[i][1]= "NA"
+            else: Statistics.profits[i][1]= m.hashPower
+            Statistics.profits[i][2]= m.blocks
+            Statistics.profits[i][3]= round(m.blocks/Statistics.mainBlocks * 100,2)
+            if p.model==2:
+                Statistics.profits[i][4]= m.uncles
+                Statistics.profits[i][5]= round((m.blocks + m.uncles)/(Statistics.mainBlocks + Statistics.totalUncles) * 100,2)
+            else: Statistics.profits[i][4]=0; Statistics.profits[i][5]=0
+            Statistics.profits[i][6]= m.balance
+
+        Statistics.index+=1
+
+    ########################################################### prepare the global chain  ###########################################################################################
+    def global_chain():
+        if p.model==0 or p.model==1:
+                for i in c.global_chain:
+                        block= [i.depth, i.id, i.previous, i.timestamp, i.miner, len(i.transactions), i.size]
+                        Statistics.chain +=[block]
+        elif p.model==2:
+                for i in c.global_chain:
+                        block= [i.depth, i.id, i.previous, i.timestamp, i.miner, len(i.transactions), i.usedgas, len(i.uncles)]
+                        Statistics.chain +=[block]
+
+    ########################################################### Print simulation results to Excel ###########################################################################################
+    def print_to_excel(fname):
+
+        df1 = pd.DataFrame({'Block Time': [p.Binterval], 'Block Propagation Delay': [p.Bdelay], 'No. Miners': [len(p.NODES)], 'Simulation Time': [p.simTime]})
+        #data = {'Stale Rate': Results.staleRate,'Uncle Rate': Results.uncleRate ,'# Stale Blocks': Results.staleBlocks,'# Total Blocks': Results.totalBlocks, '# Included Blocks': Results.mainBlocks, '# Uncle Blocks': Results.uncleBlocks}
+
+        df2= pd.DataFrame(Statistics.blocksResults)
+        df2.columns= ['Total Blocks', 'Main Blocks', 'Uncle blocks', 'Uncle Rate', 'Stale Blocks', 'Stale Rate', '# transactions']
+
+        df3 = pd.DataFrame(Statistics.profits)
+        df3.columns = ['Miner ID', '% Hash Power','# Mined Blocks', '% of main blocks','# Uncle Blocks','% of uncles', 'Profit (in ETH)']
+
+        df4 = pd.DataFrame(Statistics.chain)
+        #df4.columns= ['Block Depth', 'Block ID', 'Previous Block', 'Block Timestamp', 'Miner ID', '# transactions','Block Size']
+        if p.model==2: df4.columns= ['Block Depth', 'Block ID', 'Previous Block', 'Block Timestamp', 'Miner ID', '# transactions','Block Limit', 'Uncle Blocks']
+        else: df4.columns= ['Block Depth', 'Block ID', 'Previous Block', 'Block Timestamp', 'Miner ID', '# transactions', 'Block Size']
+
+        writer = pd.ExcelWriter(fname, engine='xlsxwriter')
+        df1.to_excel(writer, sheet_name='InputConfig')
+        df2.to_excel(writer, sheet_name='SimOutput')
+        df3.to_excel(writer, sheet_name='Profit')
+        df4.to_excel(writer,sheet_name='Chain')
+
+        writer.save()
+
+    ########################################################### Reset all global variables used to calculate the simulation results ###########################################################################################
+    def reset():
+        Statistics.totalBlocks=0
+        Statistics.totalUncles=0
+        Statistics.mainBlocks= 0
+        Statistics.uncleBlocks=0
+        Statistics.staleBlocks=0
+        Statistics.uncleRate=0
+        Statistics.staleRate=0
+        Statistics.blockData=[]
+
+    def reset2():
+        Statistics.blocksResults=[]
+        Statistics.profits= [[0 for x in range(7)] for y in range(p.Runs * len(p.NODES))] # rows number of miners * number of runs, columns =7
+        Statistics.index=0
+        Statistics.chain=[]
+</file>
+
+<file path="Event.py">
+import operator
+from InputsConfig import InputsConfig as p
+
+class Event(object):
+
+    """ Defines the Evevnt.
+
+        :param str type: the event type (block creation or block reception)
+        :param int node: the id of the node that the event belongs to
+        :param float time: the simualtion time in which the event will be executed at
+        :param obj block: the event content "block" to be generated or received
+    """
+    def __init__(self,type, node, time, block):
+        self.type = type
+        self.node = node
+        self.time = time
+        self.block = block
+
+class Queue:
+    event_list=[] # this is where future events will be stored
+    def add_event(event):
+        Queue.event_list += [event]
+    def remove_event(event):
+        del Queue.event_list[0]
+    def get_next_event():
+        Queue.event_list.sort(key=operator.attrgetter('time'), reverse=False) # sort events -> earliest one first
+        return Queue.event_list[0]
+    def size():
+        return len(Queue.event_list)
+    def isEmpty():
+        return len(Queue.event_list) == 0
+</file>
+
+<file path="Models/AppendableBlock/BlockCommit.py">
+#######################################################################################
+#
+# This class is responsible for generating and handling various events relating to
+# blocks and transaction as required for the AppendableBlock model.
+#
+# Author: Panayiota Theodorou
+# Date: March 2020
+#
+#######################################################################################
+
+from Event import Event, Queue
+from Models.BlockCommit import BlockCommit as BaseBlockCommit
+from Scheduler import Scheduler
+from InputsConfig import InputsConfig as p
+from Models.AppendableBlock.Node import Node
+from Models.AppendableBlock.Statistics import Statistics
+from Models.AppendableBlock.Transaction import FullTransaction as FT
+from Models.AppendableBlock.Transaction import Transaction as Transaction
+from Models.AppendableBlock.Network import Network
+import random
+import copy
+
+
+class BlockCommit(BaseBlockCommit):
+
+    # Handles all the event types
+    def handle_event(event):
+        if event.type == "create_block":
+            BlockCommit.handle_create_block(event)
+        elif event.type == "append_tx_list":
+            BlockCommit.handle_append_tx_list(event)
+        elif event.type == "receive_tx_list":
+            BlockCommit.handle_receive_tx_list(event)
+
+     # Generates and appends a block to specified gateway's chain
+    def handle_create_block(event):
+        Statistics.total_blocks += 1
+        index = p.GATEWAYIDS.index(event.block.receiverGatewayId)
+        node = p.NODES[index]
+        event.block.previous = node.last_block().id
+        node.blockchain.append(event.block)
+
+    # Append specified transcation to specified block ledger
+    def append_tx(tx, block_ledger):
+        tx_count = len(block_ledger)
+        if tx_count > 0:
+            tx.previous = block_ledger[tx_count-1].id
+        block_ledger.append(tx)
+
+    # Appends a transaction list to the speicfied gateway's block ledger
+    def handle_append_tx_list(event):
+        index = p.GATEWAYIDS.index(event.node)
+        gateway_node = p.NODES[index]
+        tx_insertion_delay = random.expovariate(1/p.insertTxDelay)
+        tx_insertion_delay_increment = tx_insertion_delay
+        tx_count = 1
+        for tx in event.block.transactions:
+            t = copy.deepcopy(tx)
+            t.timestamp[2] = event.block.timestamp + \
+                tx_insertion_delay_increment
+            BlockCommit.append_tx(t,
+                                  gateway_node.blockchain[tx.sender + p.Gn].transactions)
+
+            tx_count += 1
+            tx_insertion_delay_increment += tx_count * \
+                (tx_insertion_delay/p.txListSize)
+
+    # Receives and appends a transaction list to the speicfied gateway's block ledger
+    def handle_receive_tx_list(event):
+        index = p.GATEWAYIDS.index(event.node)
+        gateway_node = p.NODES[index]
+        gateway_prop_delay = Network.tx_list_prop_delay()
+        tx_insertion_delay = random.expovariate(1/p.insertTxDelay)
+        tx_insertion_delay_increment = tx_insertion_delay
+        tx_count = 1
+        for tx in event.block.transactions:
+            t = copy.deepcopy(tx)
+            t.timestamp[2] = event.block.timestamp + \
+                gateway_prop_delay + tx_insertion_delay_increment
+
+            BlockCommit.append_tx(
+                t, gateway_node.blockchain[tx.sender + p.Gn].transactions)
+
+            tx_count += 1
+            tx_insertion_delay_increment += tx_count * \
+                (tx_insertion_delay/p.txListSize)
+
+    # Shedules a "receive transcation list" event for the specified gateways
+    def schedule_event_prop_tx_list(tx_list, gatewayIds, tx_token_time):
+        for gateway_id in gatewayIds:
+            listTime = 0
+            Scheduler.receive_tx_list_event(
+                tx_list, gateway_id, tx_token_time, listTime)
+
+    # Generates and schedule the initial simulation events
+    def generate_initial_events():
+        for gateway_id in p.GATEWAYIDS:
+            for node in p.NODES:
+                Scheduler.create_block_event_AB(node, 0 + 3, gateway_id)
+
+    # Checks if all the transactions are processed
+    def transcations_procesed():
+        processed = True
+        for gateway_node in p.NODES[0:p.Gn]:
+            if len(gateway_node.transactionsPool) > 0:
+                processed = False
+                break
+
+        return processed
+
+    # Processes all the transcation events in the queue
+    def process_queue():
+        while not Queue.isEmpty():
+            next_event = Queue.get_next_event()
+            BlockCommit.handle_event(next_event)
+            Queue.remove_event(next_event)
+
+    # Processes all the gateway transaction pools
+    def process_gateway_transaction_pools():
+        tx_token_time = 0.0
+
+        # Loop processing all the transaction in the system
+        while not BlockCommit.transcations_procesed():
+
+            tx_list_inserted = False
+
+            # Randomly allocate transcation token to a gateway
+            gateway_node = random.choice(p.NODES[0:p.Gn])
+
+            # Sort the transaction by receive time in ascending order
+            gateway_node.transactionsPool.sort(key=lambda tx: tx.timestamp[1])
+            tx_pool_size = len(gateway_node.transactionsPool)
+            tx_list = []
+
+            # Any transcations in the pool
+            if tx_pool_size > 0:
+                tx_count = min(p.txListSize, tx_pool_size)
+
+                # Append any valid transaction to the transaction list
+                for tx in gateway_node.transactionsPool[0:tx_count]:
+                    if tx.timestamp[1] <= tx_token_time:
+                        tx_list.append(tx)
+
+                # If there are transactions in the list schedule append and propagation events
+                if len(tx_list) > 0:
+                    Scheduler.append_tx_list_event(
+                        tx_list, gateway_node.id, tx_token_time, 0)
+                    BlockCommit.schedule_event_prop_tx_list(
+                        tx_list, gateway_node.gatewayIds, tx_token_time)
+
+                    # Remove transactions from local transaction pool
+                    for tx in tx_list:
+                        gateway_node.transactionsPool.remove(tx)
+
+                    if p.maxTxListSize < len(tx_list):
+                        p.maxTxListSize = len(tx_list)
+                    tx_list_inserted = True
+
+            # Release the transaction token
+            if tx_list_inserted:
+                tx_token_time = tx_token_time + Network.tx_list_prop_delay() + \
+                    Network.tx_token_release_delay()
+            else:
+                tx_token_time = tx_token_time + Network.tx_token_release_delay()
+
+        # Process all the transaction events in the queue
+        BlockCommit.process_queue()
+</file>
+
+<file path="Models/Bitcoin/Node.py">
+from Models.Block import Block
+from Models.Node import Node as BaseNode
+
+class Node(BaseNode):
+    def __init__(self,id,hashPower):
+        '''Initialize a new miner named name with hashrate measured in hashes per second.'''
+        super().__init__(id)#,blockchain,transactionsPool,blocks,balance)
+        self.hashPower = hashPower
+        self.blockchain= []# create an array for each miner to store chain state locally
+        self.transactionsPool= []
+        self.blocks= 0# total number of blocks mined in the main chain
+        self.balance= 0# to count all reward that a miner made, including block rewards + uncle rewards + transactions fees
+</file>
+
+<file path="Models/Ethereum/BlockCommit.py">
+from Scheduler import Scheduler
+from InputsConfig import InputsConfig as p
+from Models.Ethereum.Node import Node
+from Statistics import Statistics
+from Models.Ethereum.Transaction import LightTransaction as LT, FullTransaction as FT
+from Models.Network import Network
+from Models.Ethereum.Consensus import Consensus as c
+from Models.BlockCommit import BlockCommit as BaseBlockCommit
+
+class BlockCommit(BaseBlockCommit):
+
+    # Handling and running Events
+    def handle_event(event):
+        if event.type == "create_block":
+            BlockCommit.generate_block(event)
+        elif event.type == "receive_block":
+            BlockCommit.receive_block(event)
+
+    # Block Creation Event
+    def generate_block (event):
+        miner = p.NODES[event.block.miner]
+        minerId = miner.id
+        eventTime = event.time
+        blockPrev = event.block.previous
+
+        if blockPrev == miner.last_block().id:
+            Statistics.totalBlocks += 1 # count # of total blocks created!
+            if p.hasTrans:
+                if p.Ttechnique == "Light": blockTrans,blockSize = LT.execute_transactions()
+                elif p.Ttechnique == "Full": blockTrans,blockSize = FT.execute_transactions(miner,eventTime)
+
+                event.block.transactions = blockTrans
+                event.block.usedgas= blockSize
+
+            if p.hasUncles:
+                BlockCommit.update_unclechain(miner)
+                blockUncles = Node.add_uncles(miner) # add uncles to the block
+                event.block.uncles = blockUncles #(only when uncles activated)
+
+            miner.blockchain.append(event.block)
+
+            if p.hasTrans and p.Ttechnique == "Light":LT.create_transactions() # generate transactions
+            BlockCommit.propagate_block(event.block)
+            BlockCommit.generate_next_block(miner,eventTime)# Start mining or working on the next block
+
+    # Block Receiving Event
+    def receive_block (event):
+
+        miner = p.NODES[event.block.miner]
+        minerId = miner.id
+        currentTime = event.time
+        blockPrev = event.block.previous # previous block id
+
+
+        node = p.NODES[event.node] # recipint
+        lastBlockId= node.last_block().id # the id of last block
+
+        #### case 1: the received block is built on top of the last block according to the recipient's blockchain ####
+        if blockPrev == lastBlockId:
+            node.blockchain.append(event.block) # append the block to local blockchain
+
+            if p.hasTrans and p.Ttechnique == "Full": BaseBlockCommit.update_transactionsPool(node, event.block)
+
+            BlockCommit.generate_next_block(node,currentTime)# Start mining or working on the next block
+
+         #### case 2: the received block is  not built on top of the last block ####
+        else:
+            depth = event.block.depth + 1
+            if (depth > len(node.blockchain)):
+                BlockCommit.update_local_blockchain(node,miner,depth)
+                BlockCommit.generate_next_block(node,currentTime)# Start mining or working on the next block
+
+            #### 2- if depth of the received block <= depth of the last block, then reject the block (add it to unclechain) ####
+            else:
+                 uncle=event.block
+                 node.unclechain.append(uncle)
+
+            if p.hasUncles: BlockCommit.update_unclechain(node)
+            if p.hasTrans and p.Ttechnique == "Full": BaseBlockCommit.update_transactionsPool(node,event.block) # not sure yet.
+
+    # Upon generating or receiving a block, the miner start working on the next block as in POW
+    def generate_next_block(node,currentTime):
+	    if node.hashPower > 0:
+                 blockTime = currentTime + c.Protocol(node) # time when miner x generate the next block
+                 Scheduler.create_block_event(node,blockTime)
+
+    def generate_initial_events():
+            currentTime=0
+            for node in p.NODES:
+            	BlockCommit.generate_next_block(node,currentTime)
+
+    def propagate_block (block):
+        for recipient in p.NODES:
+            if recipient.id != block.miner:
+                blockDelay= Network.block_prop_delay() # draw block propagation delay from a distribution !! or you can assign 0 to ignore block propagation delay
+                Scheduler.receive_block_event(recipient,block,blockDelay)
+
+    def update_local_blockchain(node,miner,depth):
+        # the node here is the one that needs to update its blockchain, while miner here is the one who owns the last block generated
+        # the node will update its blockchain to mach the miner's blockchain
+        from InputsConfig import InputsConfig as p
+        i=0
+        while (i < depth):
+            if (i < len(node.blockchain)):
+                if (node.blockchain[i].id != miner.blockchain[i].id): # and (self.node.blockchain[i-1].id == Miner.blockchain[i].previous) and (i>=1):
+                    node.unclechain.append(node.blockchain[i]) # move block to unclechain
+                    newBlock = miner.blockchain[i]
+                    node.blockchain[i]= newBlock
+                    if p.hasTrans and p.Ttechnique == "Full": BaseBlockCommit.update_transactionsPool(node,newBlock)
+            else:
+                newBlock = miner.blockchain[i]
+                node.blockchain.append(newBlock)
+                if p.hasTrans and p.Ttechnique == "Full": BaseBlockCommit.update_transactionsPool(node,newBlock)
+            i+=1
+
+    # Upon receiving a block, update local unclechain to remove all uncles included in the received block
+    def update_unclechain(node):
+        ### remove all duplicates uncles in the miner's unclechain
+        a = set()
+        x=0
+        while x < len(node.unclechain):
+            if node.unclechain[x].id in a:
+                del node.unclechain[x]
+                x-=1
+            else:
+                a.add(node.unclechain[x].id)
+            x+=1
+
+        j=0
+        while j < len (node.unclechain):
+            for k in node.blockchain:
+                if node.unclechain[j].id == k.id:
+                    del node.unclechain[j] # delete uncle after inclusion
+                    j-=1
+                    break
+            j+=1
+
+        j=0
+        while j < len (node.unclechain):
+            c="t"
+            for k in node.blockchain:
+                u=0
+                while u < len(k.uncles):
+                    if node.unclechain[j].id == k.uncles[u].id:
+                        del node.unclechain[j] # delete uncle after inclusion
+                        j-=1
+                        c="f"
+                        break
+                    u+=1
+                if c=="f":
+                    break
+            j+=1
+</file>
+
+<file path="Models/Ethereum/Consensus.py">
+import numpy as np
+from InputsConfig import InputsConfig as p
+from Models.Ethereum.Node import Node
+from Models.Consensus import Consensus as BaseConsensus
+import random
+
+#from ImportClasses import Node
+
+class Consensus(BaseConsensus):
+
+
+    """ 
+	We modelled PoW consensus protocol by drawing the time it takes the miner to finish the PoW from an exponential distribution
+        based on the invested hash power (computing power) fraction
+    """
+    def Protocol(miner):
+        ##### Start solving a fresh PoW on top of last block appended #####
+        TOTAL_HASHPOWER = sum([miner.hashPower for miner in p.NODES])
+        hashPower = miner.hashPower/TOTAL_HASHPOWER
+        return random.expovariate(hashPower * 1/p.Binterval)
+
+
+    """ 
+	This method apply the longest-chain approach to resolve the forks that occur when nodes have multiple differeing copies of the blockchain ledger
+    """
+    def fork_resolution():
+        BaseConsensus.global_chain = [] # reset the global chain before filling it
+
+        a=[]
+        for i in p.NODES:
+            a+=[i.blockchain_length()]
+        x = max(a)
+
+        b=[]
+        z=0
+        for i in p.NODES:
+            if i.blockchain_length() == x:
+                b+=[i.id]
+                z=i.id
+
+        if len(b) > 1:
+            c=[]
+            for i in p.NODES:
+                if i.blockchain_length() == x:
+                    c+=[i.last_block().miner]
+            z = np.bincount(c)
+            z= np.argmax(z)
+
+        for i in p.NODES:
+            if i.blockchain_length() == x and i.last_block().miner == z:
+                for bc in range(len(i.blockchain)):
+                    BaseConsensus.global_chain.append(i.blockchain[bc])
+                break
+</file>
+
+<file path="Models/Ethereum/Distribution/DistFit.py">
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Aug 26 19:11:48 2019
+
+@author: b6068199
+"""
+import numpy as np
+from sklearn.mixture import GaussianMixture
+from sklearn.ensemble import RandomForestRegressor
+from InputsConfig import InputsConfig as p
+import pandas as pd
+
+""" A class to fit distribution to Ethereum transaction attributes, which are 
+    Gas Limit, Used Gas, Gas Price as well as CPU Time
+"""
+class DistFit():
+
+    cgas=None
+    cprice=None
+    ctime=None
+    egas=None
+    eprice=None
+    etime=None
+    x=0
+
+    def fit():
+          if DistFit.x<1:
+          	df= pd.read_excel("Models/Ethereum/Distribution/Data_sets.xlsx",sheet_name="Set1")
+          	df2= pd.read_excel("Models/Ethereum/Distribution/Data_sets.xlsx",sheet_name="Set2")
+          	DistFit.cgas,DistFit.cprice,DistFit.ctime= DistFit.creation_fit(df) # fitted models (u:used gas, p: gas price, t: cpu time)
+          	DistFit.egas,DistFit.eprice,DistFit.etime= DistFit.execution_fit(df2)
+          	DistFit.x+=1
+
+
+    def creation_fit(df):
+            """
+                Define distribution of log(used gas) as Mixure Normal distribution with K components
+            """
+            K=39
+            g = GaussianMixture(n_components = K)
+
+            data= np.log(df['b']).values.reshape(-1,1)
+            gmm= g.fit(data)# fit model
+
+            """
+                Define random forest regression between used gas and cpu time
+            """
+            X = np.transpose([df['b']]) # used gas
+            y = np.array(df['d']) # cpu time
+
+            #### configure parameters for the model
+            depth= 30
+            estimators= 10
+            clf = RandomForestRegressor(max_depth=depth, n_estimators=estimators) # RF instance
+            clf.fit(X, y) #fit model
+
+            """
+                Estimate parameters of log(gas price) as normal distribution
+            """
+            eps= 0.001 # correction param
+            K=35
+            gg = GaussianMixture(n_components = K)
+            data= np.log(df['c']+eps).values.reshape(-1,1)
+            ggmm= gg.fit(data)# fit model
+
+            return gmm,ggmm,clf
+
+    def execution_fit(df):
+            """
+                Define distribution of log(used gas) as Mixure Normal distribution with K components
+            """
+            K=39
+            g = GaussianMixture(n_components = K)
+
+            data= np.log(df['b']).values.reshape(-1,1)
+            gmm= g.fit(data)# fit model
+
+            """
+                Define random forest regression between used gas and cpu time
+            """
+            X = np.transpose([df['b']]) # used gas
+            y = np.array(df['d']) # cpu time
+
+            #### configure parameters for the model
+            depth= 300
+            estimators= 100
+            clf = RandomForestRegressor(max_depth=depth, n_estimators=estimators) # RF instance
+            clf.fit(X, y) #fit model
+
+            """
+                Estimate parameters of log(gas price) as normal distribution
+            """
+            eps= 0.001 # correction param
+            K=65
+            gg = GaussianMixture(n_components = K)
+            data= np.log(df['c']+eps).values.reshape(-1,1)
+            ggmm= gg.fit(data)# fit model
+
+
+            return gmm,ggmm,clf
+
+    def sample_transactions(n):
+
+        cN= round(n * 0.0121) # rate of contract creation transactions, based on real data
+        eN= round(n * 0.9879)# rate of function execution transactions, based on real data
+        ##### sample contract creation transactions ########
+        b_s= DistFit.cgas.sample(cN)[0]
+        b_s= np.exp(b_s).flatten().round()
+        b_s[b_s<21000]= 21000
+        b_s[b_s>8000000]= 8000000
+
+        b_s=b_s.reshape(-1,1)
+        d_s= DistFit.ctime.predict(b_s)
+        c_s= np.exp(DistFit.cprice.sample(cN)[0])
+        a_s= np.random.uniform(low = b_s.flatten(), high = 8*10**6, size=cN)
+
+        a_s=a_s.round()
+        b_s=b_s.flatten().round()
+        c_s=c_s.flatten()
+        d_s=d_s.round()
+
+        ##### sample function execution transactions ########
+        b_e= DistFit.egas.sample(eN)[0]
+        b_e= np.exp(b_e).flatten().round()
+        b_e[b_e<21000]= 21000
+        b_e[b_e>8000000]= 8000000
+
+        b_e=b_e.reshape(-1,1)
+        d_e= DistFit.etime.predict(b_e)
+        c_e= np.exp(DistFit.eprice.sample(eN)[0])
+        a_e= np.random.uniform(low = b_e.flatten(), high = 8*10**6, size=eN)
+
+        a_e=a_e.round()
+        b_e=b_e.flatten().round()
+        c_e=c_e.flatten()
+        d_e=d_e.round()
+
+
+        ######### preparing samples #######
+        gasLimit= np.concatenate((a_s,a_e),axis=None)
+        usedGas= np.concatenate((b_s,b_e),axis=None)
+        gasPrice= np.concatenate((c_s,c_e),axis=None)
+        CPUTime= np.concatenate((d_s,d_e),axis=None)
+
+        return gasLimit,usedGas,gasPrice,CPUTime
+</file>
+
+<file path="Models/Ethereum/Node.py">
+from Models.Ethereum.Block import Block
+from Models.Node import Node as BaseNode
+
+
+#from ImportClasses import Block
+class Node(BaseNode):
+    def __init__(self,id,hashPower): #blockchain=[],transactionsPool=[],unclechain=[],blocks=0,balance=0,uncles=0,hashPower=0.0):
+
+        '''Initialize a new miner named name with hashrate measured in hashes per second.'''
+        super().__init__(id)#,blockchain,transactionsPool,blocks,balance)
+        self.hashPower = hashPower
+        self.unclechain = []
+        self.uncles= 0 # total number of uncle blocks included in the main chain
+        self.blockchain= []# create an array for each miner to store chain state locally
+        self.transactionsPool= []
+        self.blocks= 0# total number of blocks mined in the main chain
+        self.balance= 0# to count all reward that a miner made, including block rewards + uncle rewards + transactions fees
+
+
+    def generate_gensis_block():
+        from InputsConfig import InputsConfig as p
+        for node in p.NODES:
+            node.blockchain.append(Block())
+            
+    # This to allow miners to include uncle blocks in their main blocks
+    def add_uncles(miner):
+        from InputsConfig import InputsConfig as p
+        maxUncles = p.Buncles
+        uncles=[]
+
+        j=0
+        while j < len (miner.unclechain):
+            uncleDepth = miner.unclechain[j].depth
+            blockDepth = miner.last_block().depth
+            if maxUncles>0 and uncleDepth > blockDepth - p.Ugenerations : # to check if uncle block is received and there is space to include it, also check within 6 generation
+                uncles.append(miner.unclechain[j])
+                del miner.unclechain[j] # delete uncle after inclusion
+                j-=1
+                maxUncles-=1 # decrease allowable uncles by 1
+            j+=1
+
+        return uncles
+
+
+    ########################################################### reset the state of blockchains for all nodes in the network (before starting the next run) ###########################################################################################
+    def resetState():
+        from InputsConfig import InputsConfig as p
+        for node in p.NODES:
+            node.blockchain= [] # create an array for each miner to store chain state locally
+            node.transactionsPool= []
+            node.unclechain = []
+            node.blocks=0 # total number of blocks mined in the main chain
+            node.uncles=0 # total number of uncle blocks included in the main chain
+            node.balance= 0 # to count all reward that a miner made
+</file>
+
+<file path="Models/Transaction.py">
+import random
+from InputsConfig import InputsConfig as p
+import numpy as np
+import Models.Network
+import operator
+
+
+class Transaction(object):
+
+    """ Defines the Ethereum Block model.
+
+    :param int id: the uinque id or the hash of the transaction
+    :param int timestamp: the time when the transaction is created. In case of Full technique, this will be array of two value (transaction creation time and receiving time)
+    :param int sender: the id of the node that created and sent the transaction
+    :param int to: the id of the recipint node
+    :param int value: the amount of cryptocurrencies to be sent to the recipint node
+    :param int size: the transaction size in MB
+    :param int gasLimit: the maximum amount of gas units the transaction can use. It is specified by the submitter of the transaction
+    :param int usedGas: the amount of gas used by the transaction after its execution on the EVM
+    :param int gasPrice: the amount of cryptocurrencies (in Gwei) the submitter of the transaction is willing to pay per gas unit
+    :param float fee: the fee of the transaction (usedGas * gasPrice)
+    """
+
+    def __init__(self,
+	 id=0,
+	 timestamp=0 or [],
+	 sender=0,
+         to=0,
+         value=0,
+	 size=0.000546,
+         fee=0):
+
+        self.id = id
+        self.timestamp = timestamp
+        self.sender = sender
+        self.to= to
+        self.value=value
+        self.size = size
+        self.fee= fee
+
+
+class LightTransaction():
+
+    pending_transactions=[] # shared pool of pending transactions
+
+    def create_transactions():
+
+        LightTransaction.pending_transactions=[]
+        pool= LightTransaction.pending_transactions
+        Psize= int(p.Tn * p.Binterval)
+
+
+        for i in range(Psize):
+            # assign values for transactions' attributes. You can ignore some attributes if not of an interest, and the default values will then be used
+            tx= Transaction()
+
+            tx.id= random.randrange(100000000000)
+            tx.sender = random.choice (p.NODES).id
+            tx.to= random.choice (p.NODES).id
+            tx.size= random.expovariate(1/p.Tsize)
+            tx.fee= random.expovariate(1/p.Tfee)
+
+            pool += [tx]
+
+
+        random.shuffle(pool)
+
+
+    ##### Select and execute a number of transactions to be added in the next block #####
+    def execute_transactions():
+        transactions= [] # prepare a list of transactions to be included in the block
+        size = 0 # calculate the total block gaslimit
+        count=0
+        blocksize = p.Bsize
+        pool= LightTransaction.pending_transactions
+
+        pool = sorted(pool, key=lambda x: x.fee, reverse=True) # sort pending transactions in the pool based on the gasPrice value
+
+        while count < len(pool):
+                if  (blocksize >= pool[count].size):
+                    blocksize -= pool[count].size
+                    transactions += [pool[count]]
+                    size += pool[count].size
+                count+=1
+
+        return transactions, size
+
+class FullTransaction():
+
+    def create_transactions():
+        Psize= int(p.Tn * p.simTime)
+
+        for i in range(Psize):
+            # assign values for transactions' attributes. You can ignore some attributes if not of an interest, and the default values will then be used
+            tx= Transaction()
+
+            tx.id= random.randrange(100000000000)
+            creation_time= random.randint(0,p.simTime-1)
+            receive_time= creation_time
+            tx.timestamp= [creation_time,receive_time]
+            sender= random.choice (p.NODES)
+            tx.sender = sender.id
+            tx.to= random.choice (p.NODES).id
+            tx.size= random.expovariate(1/p.Tsize)
+            tx.fee= random.expovariate(1/p.Tfee)
+
+            sender.transactionsPool.append(tx)
+            FullTransaction.transaction_prop(tx)
+
+    # Transaction propogation & preparing pending lists for miners
+    def transaction_prop(tx):
+        # Fill each pending list. This is for transaction propogation
+        for i in p.NODES:
+            if tx.sender != i.id:
+                t= copy.deepcopy(tx)
+                t.timestamp[1] = t.timestamp[1] + Network.tx_prop_delay() # transaction propogation delay in seconds
+                i.transactionsPool.append(t)
+
+
+
+    def execute_transactions(miner,currentTime):
+        transactions= [] # prepare a list of transactions to be included in the block
+        size = 0 # calculate the total block gaslimit
+        count=0
+        blocksize = p.Bsize
+        miner.transactionsPool.sort(key=operator.attrgetter('fee'), reverse=True)
+        pool= miner.transactionsPool
+
+        while count < len(pool):
+                if  (blocksize >= pool[count].size and pool[count].timestamp[1] <= currentTime):
+                    blocksize -= pool[count].size
+                    transactions += [pool[count]]
+                    size += pool[count].size
+                count+=1
+
+        return transactions, size
+</file>
+
+<file path="InputsConfig.py">
+class InputsConfig:
+
+    """ Seclect the model to be simulated.
+    0 : The base model
+    1 : Bitcoin model
+    2 : Ethereum model
+        3 : AppendableBlock model
+    """
+    model = 3
+
+    ''' Input configurations for the base model '''
+    if model == 0:
+
+        ''' Block Parameters '''
+        Binterval = 600  # Average time (in seconds)for creating a block in the blockchain
+        Bsize = 1.0  # The block size in MB
+        Bdelay = 0.42  # average block propogation delay in seconds, #Ref: https://bitslog.wordpress.com/2016/04/28/uncle-mining-an-ethereum-consensus-protocol-flaw/
+        Breward = 12.5  # Reward for mining a block
+
+        ''' Transaction Parameters '''
+        hasTrans = True  # True/False to enable/disable transactions in the simulator
+        Ttechnique = "Light"  # Full/Light to specify the way of modelling transactions
+        Tn = 35  # The rate of the number of transactions to be created per second
+        # The average transaction propagation delay in seconds (Only if Full technique is used)
+        Tdelay = 5.1
+        Tfee = 0.000062  # The average transaction fee
+        Tsize = 0.000546  # The average transaction size  in MB
+
+        ''' Node Parameters '''
+        Nn = 3  # the total number of nodes in the network
+        NODES = []
+        from Models.Node import Node
+        # here as an example we define three nodes by assigning a unique id for each one
+        NODES = [Node(id=0), Node(id=1)]
+
+        ''' Simulation Parameters '''
+        simTime = 1000  # the simulation length (in seconds)
+        Runs = 2  # Number of simulation runs
+
+    ''' Input configurations for Bitcoin model '''
+    if model == 1:
+        ''' Block Parameters '''
+        Binterval = 600  # Average time (in seconds)for creating a block in the blockchain
+        Bsize = 1.0  # The block size in MB
+        Bdelay = 0.42  # average block propogation delay in seconds, #Ref: https://bitslog.wordpress.com/2016/04/28/uncle-mining-an-ethereum-consensus-protocol-flaw/
+        Breward = 12.5  # Reward for mining a block
+
+        ''' Transaction Parameters '''
+        hasTrans = True  # True/False to enable/disable transactions in the simulator
+        Ttechnique = "Light"  # Full/Light to specify the way of modelling transactions
+        Tn = 10  # The rate of the number of transactions to be created per second
+        # The average transaction propagation delay in seconds (Only if Full technique is used)
+        Tdelay = 5.1
+        Tfee = 0.000062  # The average transaction fee
+        Tsize = 0.000546  # The average transaction size  in MB
+
+        ''' Node Parameters '''
+        Nn = 3  # the total number of nodes in the network
+        NODES = []
+        from Models.Bitcoin.Node import Node
+        # here as an example we define three nodes by assigning a unique id for each one + % of hash (computing) power
+        NODES = [Node(id=0, hashPower=50), Node(
+            id=1, hashPower=20), Node(id=2, hashPower=30)]
+
+        ''' Simulation Parameters '''
+        simTime = 10000  # the simulation length (in seconds)
+        Runs = 2  # Number of simulation runs
+
+    ''' Input configurations for Ethereum model '''
+    if model == 2:
+
+        ''' Block Parameters '''
+        Binterval = 12.42  # Average time (in seconds)for creating a block in the blockchain
+        Bsize = 1.0  # The block size in MB
+        Blimit = 8000000  # The block gas limit
+        Bdelay = 6  # average block propogation delay in seconds, #Ref: https://bitslog.wordpress.com/2016/04/28/uncle-mining-an-ethereum-consensus-protocol-flaw/
+        Breward = 2  # Reward for mining a block
+
+        ''' Transaction Parameters '''
+        hasTrans = True  # True/False to enable/disable transactions in the simulator
+        Ttechnique = "Light"  # Full/Light to specify the way of modelling transactions
+        Tn = 20  # The rate of the number of transactions to be created per second
+        # The average transaction propagation delay in seconds (Only if Full technique is used)
+        Tdelay = 3
+        # The transaction fee in Ethereum is calculated as: UsedGas X GasPrice
+        Tsize = 0.000546  # The average transaction size  in MB
+
+        ''' Drawing the values for gas related attributes (UsedGas and GasPrice, CPUTime) from fitted distributions '''
+
+        ''' Uncles Parameters '''
+        hasUncles = True  # boolean variable to indicate use of uncle mechansim or not
+        Buncles = 2  # maximum number of uncle blocks allowed per block
+        Ugenerations = 7  # the depth in which an uncle can be included in a block
+        Ureward = 0
+        UIreward = Breward / 32  # Reward for including an uncle
+
+        ''' Node Parameters '''
+        Nn = 3  # the total number of nodes in the network
+        NODES = []
+        from Models.Ethereum.Node import Node
+        # here as an example we define three nodes by assigning a unique id for each one + % of hash (computing) power
+        NODES = [Node(id=0, hashPower=50), Node(
+            id=1, hashPower=20), Node(id=2, hashPower=30)]
+
+        ''' Simulation Parameters '''
+        simTime = 500  # the simulation length (in seconds)
+        Runs = 2  # Number of simulation runs
+
+        ''' Input configurations for AppendableBlock model '''
+    if model == 3:
+        ''' Transaction Parameters '''
+        hasTrans = True
+        Ttechnique = "Full"
+
+        # Simulated TPS: Gn × Dn × Tn = 21 × 10 × 6 = 1260 TPS (normal load)
+        Tn = 40  # Transactions per device per second
+
+        txListSize = 100  # Max transactions per batch (leave unchanged)
+
+        ''' Node Parameters '''
+        Dn = 10  # Number of devices per gateway (delegate)
+        Gn = 21  # Number of gateway nodes (delegates)
+        Nn = Gn + (Gn * Dn)
+        NODES = []
+        GATEWAYIDS = [chr(x + 97) for x in range(Gn)]
+        from Models.AppendableBlock.Node import Node
+
+        # Create all the gateways
+        for i in GATEWAYIDS:
+            otherGatewayIds = GATEWAYIDS.copy()
+            otherGatewayIds.remove(i)
+            NODES.append(Node(i, "g", otherGatewayIds))
+
+        # Create the device nodes for each gateway
+        deviceNodeId = 1
+        for i in GATEWAYIDS:
+            for j in range(Dn):
+                NODES.append(Node(deviceNodeId, "d", i))
+                deviceNodeId += 1
+
+        ''' Simulation Parameters '''
+        # Realistic network latencies (converted to seconds)
+        propTxDelay = 0.01  # 10ms
+        propTxListDelay = 0.015  # 15ms
+        insertTxDelay = 0.005  # 5ms
+
+        simTime = 200  # Simulation duration (s)
+        Runs = 1  # Number of runs
+
+        ''' Verification '''
+        VerifyImplemetation = True
+        maxTxListSize = 0
+</file>
+
+<file path="Models/Ethereum/Transaction.py">
+from Models.Ethereum.Distribution.DistFit import DistFit
+import random
+from InputsConfig import InputsConfig as p
+import numpy as np
+from Models.Network import Network
+import operator
+from Models.Ethereum.Distribution.DistFit import DistFit
+
+class Transaction(object):
+
+    """ Defines the Ethereum Block model.
+
+    :param int id: the uinque id or the hash of the transaction
+    :param int timestamp: the time when the transaction is created. In case of Full technique, this will be array of two value (transaction creation time and receiving time)
+    :param int sender: the id of the node that created and sent the transaction
+    :param int to: the id of the recipint node
+    :param int value: the amount of cryptocurrencies to be sent to the recipint node
+    :param int size: the transaction size in MB
+    :param int gasLimit: the maximum amount of gas units the transaction can use. It is specified by the submitter of the transaction
+    :param int usedGas: the amount of gas used by the transaction after its execution on the EVM
+    :param int gasPrice: the amount of cryptocurrencies (in Gwei) the submitter of the transaction is willing to pay per gas unit
+    :param float fee: the fee of the transaction (usedGas * gasPrice)
+    """
+
+    def __init__(self,
+	 id=0,
+	 timestamp=0 or [],
+	 sender=0,
+         to=0,
+         value=0,
+	 size=0.000546,
+         gasLimit= 8000000,
+         usedGas=0,
+         gasPrice=0,
+         fee=0):
+
+        self.id = id
+        self.timestamp = timestamp
+        self.sender = sender
+        self.to= to
+        self.value=value
+        self.size = size
+        self.gasLimit=gasLimit
+        self.usedGas = usedGas
+        self.gasPrice=gasPrice
+        self.fee= usedGas * gasPrice
+
+
+
+class LightTransaction():
+
+    pool=[] # shared pool of pending transactions
+    #x=0 # counter to only fit distributions once during the simulation
+
+    def create_transactions():
+
+        LightTransaction.pool=[]
+        Psize= int(p.Tn * p.Binterval)
+
+        #if LightTransaction.x<1:
+        DistFit.fit() # fit distributions
+        gasLimit,usedGas,gasPrice,_ = DistFit.sample_transactions(Psize) # sampling gas based attributes for transactions from specific distribution
+
+        for i in range(Psize):
+            # assign values for transactions' attributes. You can ignore some attributes if not of an interest, and the default values will then be used
+            tx= Transaction()
+
+            tx.id= random.randrange(100000000000)
+            tx.sender = random.choice (p.NODES).id
+            tx.to= random.choice (p.NODES).id
+            tx.gasLimit=gasLimit[i]
+            tx.usedGas=usedGas[i]
+            tx.gasPrice=gasPrice[i]/1000000000
+            tx.fee= tx.usedGas * tx.gasPrice
+
+            LightTransaction.pool += [tx]
+
+
+        random.shuffle(LightTransaction.pool)
+
+
+    ##### Select and execute a number of transactions to be added in the next block #####
+    def execute_transactions():
+        transactions= [] # prepare a list of transactions to be included in the block
+        limit = 0 # calculate the total block gaslimit
+        count=0
+        blocklimit = p.Blimit
+
+        pool = sorted(LightTransaction.pool, key=lambda x: x.gasPrice, reverse=True) # sort pending transactions in the pool based on the gasPrice value
+
+        while count < len(pool):
+                if  (blocklimit >= pool[count].gasLimit):
+                    blocklimit -= pool[count].usedGas
+                    transactions += [pool[count]]
+                    limit += pool[count].usedGas
+                count+=1
+
+        return transactions, limit
+
+class FullTransaction():
+    x=0 # counter to only fit distributions once during the simulation
+
+    def create_transactions():
+        Psize= int(p.Tn * p.Binterval)
+
+        if FullTransaction.x<1:
+            DistFit.fit() # fit distributions
+        gasLimit,usedGas,gasPrice,_ = DistFit.sample_transactions(Psize) # sampling gas based attributes for transactions from specific distribution
+
+        for i in range(Psize):
+            # assign values for transactions' attributes. You can ignore some attributes if not of an interest, and the default values will then be used
+            tx= Transaction()
+
+            tx.id= random.randrange(100000000000)
+            creation_time= random.randint(0,p.simTime-1)
+            receive_time= creation_time
+            tx.timestamp= [creation_time,receive_time]
+            sender= random.choice (p.NODES)
+            tx.sender = sender.id
+            tx.to= random.choice (p.NODES).id
+            tx.gasLimit=gasLimit[i]
+            tx.usedGas=usedGas[i]
+            tx.gasPrice=gasPrice[i]/1000000000
+            tx.fee= tx.usedGas * tx.gasPrice
+
+            sender.transactionsPool.append(tx)
+            FullTransaction.transaction_prop(tx)
+
+    # Transaction propogation & preparing pending lists for miners
+    def transaction_prop(tx):
+        # Fill each pending list. This is for transaction propogation
+        for i in p.NODES:
+            if tx.sender != i.id:
+                t= tx
+                t.timestamp[1] = t.timestamp[1] + Network.tx_prop_delay() # transaction propogation delay in seconds
+                i.transactionsPool.append(t)
+
+
+
+    def execute_transactions(miner,currentTime):
+        transactions= [] # prepare a list of transactions to be included in the block
+        limit = 0 # calculate the total block gaslimit
+        count=0
+        blocklimit = p.Blimit
+        miner.transactionsPool.sort(key=operator.attrgetter('gasPrice'), reverse=True)
+        pool= miner.transactionsPool
+
+        while count < len(pool):
+                if  (blocklimit >= pool[count].gasLimit and pool[count].timestamp[1] <= currentTime):
+                    blocklimit -= pool[count].usedGas
+                    transactions += [pool[count]]
+                    limit += pool[count].usedGas
+                count+=1
+
+        return transactions, limit
+</file>
+
+<file path="Main.py">
+from InputsConfig import InputsConfig as p
+from Event import Event, Queue
+from Scheduler import Scheduler
+from Statistics import Statistics
+
+if p.model == 3:
+    from Models.AppendableBlock.BlockCommit import BlockCommit
+    from Models.Consensus import Consensus
+    from Models.AppendableBlock.Transaction import FullTransaction as FT
+    from Models.AppendableBlock.Node import Node
+    from Models.Incentives import Incentives
+    from Models.AppendableBlock.Statistics import Statistics
+    from Models.AppendableBlock.Verification import Verification
+
+elif p.model == 2:
+    from Models.Ethereum.BlockCommit import BlockCommit
+    from Models.Ethereum.Consensus import Consensus
+    from Models.Ethereum.Transaction import LightTransaction as LT, FullTransaction as FT
+    from Models.Ethereum.Node import Node
+    from Models.Ethereum.Incentives import Incentives
+
+elif p.model == 1:
+    from Models.Bitcoin.BlockCommit import BlockCommit
+    from Models.Bitcoin.Consensus import Consensus
+    from Models.Transaction import LightTransaction as LT, FullTransaction as FT
+    from Models.Bitcoin.Node import Node
+    from Models.Incentives import Incentives
+
+elif p.model == 0:
+    from Models.BlockCommit import BlockCommit
+    from Models.Consensus import Consensus
+    from Models.Transaction import LightTransaction as LT, FullTransaction as FT
+    from Models.Node import Node
+    from Models.Incentives import Incentives
+
+########################################################## Start Simulation ##############################################################
+
+
+def main():
+    for i in range(p.Runs):
+        clock = 0  # set clock to 0 at the start of the simulation
+        if p.hasTrans:
+            if p.Ttechnique == "Light":
+                LT.create_transactions()  # generate pending transactions
+            elif p.Ttechnique == "Full":
+                FT.create_transactions()  # generate pending transactions
+
+        Node.generate_gensis_block()  # generate the gensis block for all miners
+        # initiate initial events >= 1 to start with
+        BlockCommit.generate_initial_events()
+
+        while not Queue.isEmpty() and clock <= p.simTime:
+            next_event = Queue.get_next_event()
+            clock = next_event.time  # move clock to the time of the event
+            BlockCommit.handle_event(next_event)
+            Queue.remove_event(next_event)
+
+        # for the AppendableBlock process transactions and
+        # optionally verify the model implementation
+        if p.model == 3:
+            BlockCommit.process_gateway_transaction_pools()
+
+            if i == 0 and p.VerifyImplemetation:
+                Verification.perform_checks()
+
+        Consensus.fork_resolution()  # apply the longest chain to resolve the forks
+        # distribute the rewards between the particiapting nodes
+        Incentives.distribute_rewards()
+        # calculate the simulation results (e.g., block statstics and miners' rewards)
+        Statistics.calculate()
+
+        if p.model == 3:
+            Statistics.print_to_excel(i, True)
+            Statistics.reset()
+        else:
+            Statistics.reset()
+            Node.resetState()
+            if hasattr(p, 'Bsize'):
+                fname = "(Allverify)1day_{0}M_{1}K.xlsx".format(p.Bsize / 1000000, p.Tn / 1000)
+                Statistics.print_to_excel(fname)
+            else:
+                fname = "AppendableBlockResults.xlsx"
+                Statistics.print_to_excel(i, True)
+
+        if hasattr(Statistics, "reset2"):
+            Statistics.reset2()
+
+
+######################################################## Run Main method #####################################################################
+if __name__ == '__main__':
+    main()
+</file>
+
+<file path="Scheduler.py">
+from InputsConfig import InputsConfig as p
+import random
+from Models.Block import Block
+from Event import Event, Queue
+
+if p.model == 2:
+    from Models.Ethereum.Block import Block
+elif p.model == 3:
+    from Models.AppendableBlock.Block import Block as AB
+    from Models.AppendableBlock.Node import Node
+else:
+    from Models.Block import Block
+
+
+class Scheduler:
+
+    # Schedule a block creation event for a miner and add it to the event list
+    def create_block_event(miner, eventTime):
+        eventType = "create_block"
+        if eventTime <= p.simTime:
+            # prepare attributes for the event
+            block = Block()
+            block.miner = miner.id
+            block.depth = len(miner.blockchain)
+            block.id = random.randrange(100000000000)
+            block.previous = miner.last_block().id
+            block.timestamp = eventTime
+
+            event = Event(eventType, block.miner, eventTime,
+                          block)  # create the event
+            Queue.add_event(event)  # add the event to the queue
+
+    # Schedule a block receiving event for a node and add it to the event list
+    def receive_block_event(recipient, block, blockDelay):
+        receive_block_time = block.timestamp + blockDelay
+        if receive_block_time <= p.simTime:
+            e = Event("receive_block", recipient.id, receive_block_time, block)
+            Queue.add_event(e)
+
+    # Schedule a block creation event for a gateway - AppendableBlock model
+    def create_block_event_AB(node, eventTime, receiverGatewayId):
+        eventType = "create_block"
+        if eventTime <= p.simTime:
+            # Populate event attributes
+            block = AB()
+            block.id = random.randrange(100000000000)
+            block.timestamp = eventTime
+            block.nodeId = node.id
+            block.gatewayIds = node.gatewayIds
+            block.receiverGatewayId = receiverGatewayId
+            event = Event(eventType, node.id, eventTime, block)
+            Queue.add_event(event)  # add the event to the queue
+
+    # Schedule a create transaction list event for a gateway
+    def append_tx_list_event(txList, gatewayId, tokenTime, eventTime):
+        eventType = "append_tx_list"
+        if eventTime <= p.simTime:
+            block = AB()
+            block.transactions = txList.copy()
+            block.timestamp = tokenTime
+            event = Event(eventType, gatewayId, eventTime, block)
+            Queue.add_event(event)
+
+    # Schedule a transaction list receiving event for a gateway
+    def receive_tx_list_event(txList, gatewayId, tokenTime, eventTime):
+        eventType = "receive_tx_list"
+        if eventTime <= p.simTime:
+            block = AB()
+            block.transactions = txList.copy()
+            block.timestamp = tokenTime
+            event = Event(eventType, gatewayId, eventTime, block)
+            Queue.add_event(event)
+</file>
+
+<file path="README.md">
+# BlockSim Simultor
+
+## What is BlockSim Simulator?
+**BlockSim** is an open source blockchain simulator, capturing network, consensus and incentives layers of blockchain systems. BlockSim aims to provide simulation constructs that are intuitive, hide unnecessary detail and can be easily manipulated to be applied to a large set of blockchains design and deployment questions (related to performance, reliability, security or other properties of interest). At the core of BlockSim is a Base Model, which contains a number of functional blocks (e.g., blocks, transactions and nodes) common across blockchains, that can be extended and configured as suited for the system and study of interest. BlockSim is implemented in **Python**.
+
+For more details about BlockSim, we refer to our journal paper that can be freely accessed online https://www.frontiersin.org/articles/10.3389/fbloc.2020.00028/full
+
+## Installation and Requirements
+
+Before you can use BlockSim  simulator, you need to have **Python version 3 or above** installed in your machine as well as have the following packages installed:
+
+- pandas 
+>pip install pandas
+- numpy 
+>pip install numpy
+- sklearn 
+>pip install sklearn
+- xlsxwriter
+>pip install xlsxwriter
+
+## Running the simulator
+
+Before you run the simulator, you can access the configuration file *InputsConfig.py* to choose the model of interest (Base Model 0, Bitcoin Model 1 and Ethereum Model 2) and to set up the related parameters.
+The parameters include the number of nodes (and their fraction of hash power), the block interval time, the block propagation delays, the block and transaction sizes, the block rewards, the tranaction fees etc.
+Each model has a slightly different (or additional) parameters to capture it.
+
+To run the simulator, one needs to trigger the main class *Main.py* either from the command line
+> python Main.py
+
+or using any Python editor such as Spyder.
+
+## Statistics and Results
+
+The results of the simulator is printed in an excel file at the end of the simulation. The results include the blockchain ledger, number of blocks mined, number of stale (uncles) blocks and the rewards gained by each miner etc. 
+
+## Contact
+
+For any query about how to use or even extend the simulator, feel free to contact me **alharbi.maher@gmail.com**
+</file>
+
+</files>
